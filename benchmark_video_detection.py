@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video", required=True, help="Path to input video file")
     parser.add_argument("--model_id", default="facebook/detr-resnet-50", help="HuggingFace model id")
     parser.add_argument("--device", default="cuda", choices=["cpu", "cuda"], help="Device to run on")
-    parser.add_argument("--out_dir", default="./benchmark_outputs", help="Directory to save outputs")
+    parser.add_argument("--out_dir", default="./benchmark_outputs_updated", help="Directory to save outputs")
     parser.add_argument("--frames_limit", type=int, default=0, help="Limit number of frames (0 means all)")
     parser.add_argument("--warmup", type=int, default=20, help="Warmup frames before timing")
     parser.add_argument("--threshold", type=float, default=0.3, help="Score threshold for drawing boxes")
@@ -172,7 +172,10 @@ def create_dynamic_shapes_config() -> dict:
     width_dim = Dim("width", min=32, max=4096)
     return {
         "images": {2: height_dim, 3: width_dim},
-        "post_process_kwargs": {"target_sizes": None},
+        "post_process_kwargs": {
+            "target_sizes": None,
+            "threshold": None,  # Must match input structure
+        },
     }
 
 
@@ -243,7 +246,8 @@ def run_e2e_torch_export(config: BenchmarkConfig) -> BenchmarkResult:
     example_input = {
         "images": images.to(config.device),
         "post_process_kwargs": {
-            "target_sizes": torch.tensor([[frame_bgr.shape[0], frame_bgr.shape[1]]], device=config.device)
+            "target_sizes": torch.tensor([[frame_bgr.shape[0], frame_bgr.shape[1]]], device=config.device),
+            "threshold": config.threshold,
         },
     }
 
@@ -265,7 +269,12 @@ def run_e2e_torch_export(config: BenchmarkConfig) -> BenchmarkResult:
         images = model.get_tensors_inputs(pil_img, device=config.device)
         target_sizes = torch.tensor([[frame_bgr.shape[0], frame_bgr.shape[1]]], device=config.device)
         with torch.no_grad():
-            outputs = exported(**{"images": images, "post_process_kwargs": {"target_sizes": target_sizes}})
+            outputs = exported(
+                **{
+                    "images": images,
+                    "post_process_kwargs": {"target_sizes": target_sizes, "threshold": config.threshold},
+                }
+            )
         if num_frames >= config.warmup:
             timing_end()
 
@@ -373,7 +382,10 @@ def run_e2e_onnx_runtime(config: BenchmarkConfig) -> BenchmarkResult:
     images = model.get_tensors_inputs(bgr_to_pil(frame_bgr), device=config.device)
     example_input = {
         "images": images,
-        "post_process_kwargs": {"target_sizes": torch.tensor([[frame_bgr.shape[0], frame_bgr.shape[1]]])},
+        "post_process_kwargs": {
+            "target_sizes": torch.tensor([[frame_bgr.shape[0], frame_bgr.shape[1]]]),
+            "threshold": config.threshold,
+        },
     }
 
     export_dynamic_shapes = create_dynamic_shapes_config()
@@ -587,4 +599,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # tested checkpoints (working):
+    # facebook/detr-resnet-50
+    # PekingU/rtdetr_v2_r101vd
+    # PekingU/rtdetr_r50vd_coco_o365
+    # ustc-community/dfine-large-obj365
     main()

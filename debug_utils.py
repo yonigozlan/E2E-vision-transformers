@@ -35,12 +35,15 @@ def debug_dynamic_shapes_pipeline(model, example_input, model_name="model"):
         if isinstance(example_input, dict):
             export_dynamic_shapes = {
                 "images": {2: height_dim, 3: width_dim},
-                "post_process_kwargs": {"target_sizes": None},
+                "post_process_kwargs": {
+                    "target_sizes": None,
+                    "threshold": None,
+                },
             }
         elif isinstance(example_input, tuple):
             export_dynamic_shapes = (
                 {"images": {2: height_dim, 3: width_dim}},
-                {"post_process_kwargs": {"target_sizes": None}},
+                {"post_process_kwargs": {"target_sizes": None, "threshold": None}},
             )
 
         if not export_dynamic_shapes:
@@ -80,14 +83,20 @@ def debug_dynamic_shapes_pipeline(model, example_input, model_name="model"):
                 if isinstance(example_input, dict):
                     test_input_kwargs = {
                         "images": torch.randn(1, 3, test_size[0], test_size[1]),
-                        "post_process_kwargs": {"target_sizes": torch.tensor([test_size[::-1]])},
+                        "post_process_kwargs": {
+                            "target_sizes": torch.tensor([test_size[::-1]]),
+                            "threshold": 0.5,
+                        },
                     }
                     _ = exported_program.module()(**test_input_kwargs)
                 elif isinstance(example_input, tuple):
                     test_input_tuple = (
                         {
                             "images": torch.randn(1, 3, test_size[0], test_size[1]),
-                            "post_process_kwargs": {"target_sizes": torch.tensor([test_size[::-1]])},
+                            "post_process_kwargs": {
+                                "target_sizes": torch.tensor([test_size[::-1]]),
+                                "threshold": 0.5,
+                            },
                         },
                     )
                     _ = exported_program.module()(*test_input_tuple)
